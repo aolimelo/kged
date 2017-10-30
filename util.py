@@ -13,6 +13,70 @@ from numpy.fft import fft, ifft
 import matplotlib.pyplot as plt
 
 
+def dameraulevenshtein(seq1, seq2):
+    """Calculate the Damerau-Levenshtein distance between sequences.
+    This method has not been modified from the original.
+    Source: http://mwh.geek.nz/2009/04/26/python-damerau-levenshtein-distance/
+
+    This distance is the number of additions, deletions, substitutions,
+    and transpositions needed to transform the first sequence into the
+    second. Although generally used with strings, any sequences of
+    comparable objects will work.
+    Transpositions are exchanges of *consecutive* characters; all other
+    operations are self-explanatory.
+    This implementation is O(N*M) time and O(M) space, for N and M the
+    lengths of the two sequences.
+    >>> dameraulevenshtein('ba', 'abc')
+    2
+    >>> dameraulevenshtein('fee', 'deed')
+    2
+    It works with arbitrary sequences too:
+    >>> dameraulevenshtein('abcd', ['b', 'a', 'c', 'd', 'e'])
+    2
+    """
+    # codesnippet:D0DE4716-B6E6-4161-9219-2903BF8F547F
+    # Conceptually, this is based on a len(seq1) + 1 * len(seq2) + 1 matrix.
+    # However, only the current and two previous rows are needed at once,
+    # so we only store those.
+    oneago = None
+    thisrow = range(1, len(seq2) + 1) + [0]
+    for x in xrange(len(seq1)):
+        # Python lists wrap around for negative indices, so put the
+        # leftmost column at the *end* of the list. This matches with
+        # the zero-indexed strings and saves extra calculation.
+        twoago, oneago, thisrow = oneago, thisrow, [0] * len(seq2) + [x + 1]
+        for y in xrange(len(seq2)):
+            delcost = oneago[y] + 1
+            addcost = thisrow[y - 1] + 1
+            subcost = oneago[y - 1] + (seq1[x] != seq2[y])
+            thisrow[y] = min(delcost, addcost, subcost)
+            # This block deals with transpositions
+            if (x > 0 and y > 0 and seq1[x] == seq2[y - 1]
+                and seq1[x - 1] == seq2[y] and seq1[x] != seq2[y]):
+                thisrow[y] = min(thisrow[y], twoago[y - 2] + 1)
+    return thisrow[len(seq2) - 1]
+
+
+def get_deletes_list(w, max_edit_distance):
+    '''given a word, derive strings with up to max_edit_distance characters
+       deleted'''
+    deletes = []
+    queue = [w]
+    for d in range(max_edit_distance):
+        temp_queue = []
+        for word in queue:
+            if len(word) > 1:
+                for c in range(len(word)):  # character index
+                    word_minus_c = word[:c] + word[c + 1:]
+                    if word_minus_c not in deletes:
+                        deletes.append(word_minus_c)
+                    if word_minus_c not in temp_queue:
+                        temp_queue.append(word_minus_c)
+        queue = temp_queue
+
+    return deletes
+
+
 def short_str(e):
     s = e.encode("utf8")
     offset = max([s.rfind("/"), s.rfind("#")])
@@ -122,6 +186,9 @@ def load_relations_dict(inputDir):
     dataset = np.load(inputDir)
     return dataset["relations_dict"].item() if "relations_dict" in dataset else None
 
+def load_entities_dict(inputDir):
+    dataset = np.load(inputDir)
+    return dataset["entities_dict"].item() if "entities_dict" in dataset else None
 
 def jaccard_index(s1, s2):
     return float(len(s1.intersection(s2))) / len(s1.union(s2))
@@ -801,14 +868,18 @@ def level_hierarchy(hier):
         next_level = []
         for n in level:
             for c in n.children:
-                if c.node_id in remaining:
-                    next_level.append(c)
-                    remaining.remove(c.node_id)
+                if isinstance(c,DAGNode):
+                    if c.node_id in remaining:
+                        next_level.append(c)
+                        remaining.remove(c.node_id)
+                else:
+                    if c in remaining:
+                        next_level.append(hier[c])
+                        remaining.remove(c)
 
         levels.append(level)
         level = next_level
     return levels
-
 
 def get_roots(hier):
     if not hier:
