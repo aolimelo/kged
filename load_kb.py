@@ -7,8 +7,9 @@ from util import DAGNode, level_hierarchy
 from scipy.sparse import coo_matrix
 
 nt_regex = r"<(.*)> <(.*)> <(.*)> \."
-tsv_regex = r"<(.*)>\t<(.*)>\t<(.*)>[ \t]\."
-ignored_namespaces = [OWL, RDF, RDFS, DC, DCTERMS, SKOS, VOID, FOAF, DOAP, XSD]
+tsv_regex = r"<?(.*)>?\t<?(.*)>?\t<?(.*)>?[ \t]*"
+#ignored_namespaces = [OWL, RDF, RDFS, DC, DCTERMS, SKOS, VOID, FOAF, DOAP, XSD]
+ignored_namespaces = [OWL, RDF, RDFS, SKOS, VOID, XSD]
 
 
 def filter_entity(e):
@@ -50,15 +51,22 @@ if __name__ == '__main__':
                         dict_s[s] = len(dict_s)
                     if o not in dict_t:
                         dict_t[o] = len(dict_t)
-                elif p == OWL.equivalentClass:
-                    pass
+                elif p == RDFS.subClassOf:
+                    if s not in dict_t:
+                        dict_t[s] = len(dict_t)
+                    if o not in dict_t:
+                        dict_t[o] = len(dict_t)
+                elif p == RDFS.subPropertyOf:
+                    if s not in dict_p:
+                        dict_p[s] = len(dict_p)
+                    if o not in dict_p:
+                        dict_p[o] = len(dict_p)
                 elif not filter_entity(p):
                     if p not in dict_p:
                         dict_p[p] = len(dict_p)
             except:
                 continue
-    print("%d entities, %d types, %d properties"%(len(dict_s), len(dict_t), len(dict_p)))
-
+    print("%d entities, %d types, %d properties" % (len(dict_s), len(dict_t), len(dict_p)))
 
     f = file(args.input, "rb")
     data_coo = [{"rows": [], "cols": [], "vals": []} for i in range(len(dict_p))]
@@ -124,9 +132,10 @@ if __name__ == '__main__':
             except:
                 continue
 
-    data = [coo_matrix((p["vals"], (p["rows"], p["cols"])), shape=(len(dict_s), len(dict_s)), dtype=bool) for p in data_coo]
-    typedata = coo_matrix((type_coo["vals"], (type_coo["rows"], type_coo["cols"])), shape=(len(dict_s), len(dict_t)), dtype=bool)
-
+    data = [coo_matrix((p["vals"], (p["rows"], p["cols"])), shape=(len(dict_s), len(dict_s)), dtype=bool) for p in
+            data_coo]
+    typedata = coo_matrix((type_coo["vals"], (type_coo["rows"], type_coo["cols"])), shape=(len(dict_s), len(dict_t)),
+                          dtype=bool)
 
     # change from objects to indices to avoid "maximum recursion depth exceeded" when pickling
     for i, n in type_dag.items():
@@ -138,14 +147,16 @@ if __name__ == '__main__':
 
     type_total = len(dict_t) if dict_t else 0
     type_matched = len(type_dag) if type_dag else 0
-    prop_total = len(dict_t) if dict_t else 0
+    prop_total = len(dict_p) if dict_p else 0
     prop_matched = len(prop_dag) if prop_dag else 0
 
     print "load types hierarchy: total=%d matched=%d" % (type_total, type_matched)
     print "load relations hierarchy: total=%d matched=%d" % (prop_total, prop_matched)
 
     print "materializing types hierarchy"
+
     if type_dag:
+        n1 = typedata.nnz
         typedata = typedata.tocsc()
         th_levels = level_hierarchy(type_dag)
         for nodes in reversed(th_levels[1:]):
@@ -153,15 +164,19 @@ if __name__ == '__main__':
                 for p in n.parents:
                     typedata[:, p] = typedata[:, p] + typedata[:, n.node_id]
         typedata = typedata.tocsr()
+        n2 = typedata.nnz
+        print "%d type assertions add by reasoning subClassOf relations" % (n2 - n1)
 
     print "materializing properties hierarchy"
     if prop_dag:
+        n1 = sum([A.nnz for A in data])
         ph_levels = level_hierarchy(prop_dag)
         for nodes in reversed(ph_levels[1:]):
             for n in nodes:
                 for p in n.parents:
                     data[p] = data[p] + data[n.node_id]
-
+        n2 = sum([A.nnz for A in data])
+        print "%d relation assertions added by reasoning subPropertyOf relations" % (n2 - n1)
 
 
     np.savez(args.input.replace("." + input_format, ".npz"),
