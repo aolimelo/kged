@@ -304,8 +304,8 @@ class PaTyBRED(ErrorDetector):
                     lp1_paths.add(tuple([inverses[i] for i in reversed(new_path)]))
                     self.add_path_matrix(new_path, prod)
                     self.add_path_matrix([inverses[i] for i in reversed(new_path)], prod.T)
-                    rows = set(np.where(self.X[r].indptr[1:] > self.X[r].indptr[:-1])[0])
-                    cols = set(self.X[r].indices)
+                    rows = set(np.where(prod.indptr[1:] > prod.indptr[:-1])[0])
+                    cols = set(prod.indices)
                     self.path_rowscols[tuple(new_path)] = (rows, cols)
                     self.path_rowscols[tuple([inverses[i] for i in reversed(new_path)])] = (cols, rows)
                     num_paths += 1
