@@ -1,6 +1,6 @@
 # Detection of Relation Assertion Errors in Knowledge Graphs
 
-Implementation of the PaTyBRED error detection method from the paper "Detection of Relation Assertion Errors in Knowledge Graphs" submitted to WSDM2018.
+Implementation of the PaTyBRED error detection method from the paper "Detection of Relation Assertion Errors in Knowledge Graphs" accepted at K-CAP 2017.
 
 
 ## Datasets
