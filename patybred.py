@@ -1,8 +1,6 @@
 import sys
-import math
-import timeit
+import pickle
 import gc
-import os
 from lru import LRUCacheDict
 import shelve
 from tqdm import tqdm
@@ -11,7 +9,7 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from util import generate_negatives, in_csr, in_csc, sok_matrix, jaccard_index, jaccard_distance, is_symmetric, \
-    to_triples
+    to_triples, lazy_mult_matrix, lazy_matrix
 from sklearn.svm import OneClassSVM
 from sklearn.covariance import EllipticEnvelope
 from sklearn.ensemble import IsolationForest
@@ -21,7 +19,15 @@ from sklearn.svm import SVC
 from pympler import asizeof
 import numpy as np
 from errordetector import ErrorDetector
+import signal
+import warnings
 
+
+class Model:
+    pass
+
+def handler(signum, frame):
+    raise Exception("Path computation timeout")
 
 class PaTyBRED(ErrorDetector):
     """
@@ -33,9 +39,9 @@ class PaTyBRED(ErrorDetector):
                  single_model=False, n_neg=1,
                  lfs=None, max_feats=float("inf"), emb_model=None, min_sup=0.001, max_paths_per_level=float("inf"),
                  max_pos_train=2500,
-                 learn_weights=True, debug=False, clf_name="lgr", path_selection_mode="random", sparse_train_data=True,
+                 learn_weights=True, debug=False, clf_name="lgr", path_selection_mode="m2", sparse_train_data=True,
                  max_fs_data_size=250,
-                 reduce_mem_usage=False, convert_to_sok=False):
+                 reduce_mem_usage=False, convert_to_sok=False, lazy=False):
         self.alpha = alpha
         self.max_depth = max_depth
         self.rel_dict = rel_dict
@@ -63,7 +69,9 @@ class PaTyBRED(ErrorDetector):
         self.n_selected_feats = {}
         self.matrix_paths = set()
         self.convert_to_sok = convert_to_sok
-        self.max_nnz = 100000000
+        self.max_nnz = 10000000
+        self.timeout_secs = 600
+        self.lazy = lazy
 
     def check_domain_range(self, r1, r2, domains, ranges, type_hierarchy):
         """
@@ -143,36 +151,13 @@ class PaTyBRED(ErrorDetector):
                         return float(len(inter)) / (len(s1.intersection(o2)) + 1.0)
                     if self.path_selection_mode == "m2":
                         return len(inter) * len(s1.union(o2))
-                    if self.path_selection_mode == "m3":
-                        return len(inter) * len(o1.union(o2))
-                if self.path_selection_mode.startswith("j"):
-                    s1 = self.path_rowscols[tuple(p1)][0]
-                    o2 = self.path_rowscols[tuple([r])][1]
-                    if self.path_selection_mode == "j0":
-                        return len(inter) * jaccard_index(s1, o2)
-                    if self.path_selection_mode == "j1":
-                        return len(inter) * jaccard_index(s1, o2) / (jaccard_index(s1, o2) + 1.0)
-                    if self.path_selection_mode == "j2":
-                        return len(inter) * jaccard_index(s1, o2) * jaccard_distance(s1, o2)
-                    if self.path_selection_mode == "j3":
-                        return len(inter) * jaccard_index(s1, o2) * jaccard_distance(o1, o2)
-                if self.path_selection_mode.startswith("i"):
-                    s1 = self.path_rowscols[tuple(p1)][0]
-                    o2 = self.path_rowscols[tuple([r])][1]
-                    if self.path_selection_mode == "i0":
-                        return jaccard_index(s1, o2)
-                    if self.path_selection_mode == "i1":
-                        return jaccard_index(s1, o2) / (jaccard_index(s1, o2) + 1.0)
-                    if self.path_selection_mode == "ji":
-                        return jaccard_index(s1, o2) * jaccard_distance(s1, o2)
-                    if self.path_selection_mode == "i3":
-                        return jaccard_index(s1, o2) * jaccard_distance(o1, o2)
+
 
     def learn_model(self, X, types, type_hierarchy=None, domains=None, ranges=None):
         hash_id = (sum([xi.nnz for xi in X]) + bool(types is None) + bool(type_hierarchy is None) + bool(
             domains is None) + bool(ranges is None)) * len(X)
         self.path_matrices_cache = LRUCacheDict(max_size=self.max_feats * 2)
-        # self.path_matrices = {} if not self.dump_mem else Cache("/tmp/pracache-%d"%hash_id, timeout=float("inf"))
+
         self.path_matrices = {} if not self.dump_mem else shelve.open("pracache-%d" % hash_id)
 
         self.n_instances = X[0].shape[0]
@@ -262,6 +247,7 @@ class PaTyBRED(ErrorDetector):
 
         all_paths.append(list(l_paths))
 
+
         while depth < self.max_depth and l_paths:
             candidates = {}
             for path in l_paths:
@@ -287,30 +273,44 @@ class PaTyBRED(ErrorDetector):
                 selected = candidates.keys()
 
             pbar = tqdm(total=len(selected))
+            signal.signal(signal.SIGALRM, handler)
             for new_path in selected:
-                path = new_path[:-1]
-                r2 = new_path[-1]
-                computed_paths += 2
-                A1 = self.get_path_matrix(path)
-                A2 = X[r2]
-                prod = A1.dot(A2)
+                try:
+                    path = new_path[:-1]
+                    r2 = new_path[-1]
+                    computed_paths += 2
+                    A1 = self.get_path_matrix(path)
+                    A2 = X[r2]
+                    signal.alarm(self.timeout_secs)
+                    if self.lazy:
+                        prod = lazy_matrix(A1.dot(A2))
+                    else:
+                        prod = A1.dot(A2)
+                    signal.alarm(0)
 
-                if prod.getnnz() and min_sup <= prod.getnnz() < self.max_nnz:
-                    matrices_size += asizeof.asizeof(prod)
-                    sys.stdout.write('\r%d' % matrices_size)
-                    sys.stdout.flush()
-                    new_path = list(path) + [r2]
-                    lp1_paths.add(tuple(new_path))
-                    lp1_paths.add(tuple([inverses[i] for i in reversed(new_path)]))
-                    self.add_path_matrix(new_path, prod)
-                    self.add_path_matrix([inverses[i] for i in reversed(new_path)], prod.T)
-                    rows = set(np.where(self.X[r].indptr[1:] > self.X[r].indptr[:-1])[0])
-                    cols = set(self.X[r].indices)
-                    self.path_rowscols[tuple(new_path)] = (rows, cols)
-                    self.path_rowscols[tuple([inverses[i] for i in reversed(new_path)])] = (cols, rows)
-                    num_paths += 1
+                    if prod.getnnz() and min_sup <= prod.getnnz() < self.max_nnz:
+                        matrices_size += asizeof.asizeof(prod)
+                        sys.stdout.write('\r%d' % matrices_size)
+                        sys.stdout.flush()
+                        new_path = list(path) + [r2]
+                        lp1_paths.add(tuple(new_path))
+                        lp1_paths.add(tuple([inverses[i] for i in reversed(new_path)]))
+                        self.add_path_matrix(new_path, prod)
+                        self.add_path_matrix([inverses[i] for i in reversed(new_path)], prod.transpose())
+                        if self.so_iorels_feat or depth+1 < self.max_depth:
+                            if self.lazy:
+                                rows = set(np.where(prod.m.indptr[1:] > prod.m.indptr[:-1])[0])
+                                cols = set(prod.m.indices)
+                            else:
+                                rows = set(np.where(prod.indptr[1:] > prod.indptr[:-1])[0])
+                                cols = set(prod.indices)
+                            self.path_rowscols[tuple(new_path)] = (rows, cols)
+                            self.path_rowscols[tuple([inverses[i] for i in reversed(new_path)])] = (cols, rows)
+                        num_paths += 1
 
-                pbar.update(1)
+                    pbar.update(1)
+                except Exception, exc:
+                    print(exc)
 
             pbar.close()
             all_paths.append(list(lp1_paths))
@@ -649,3 +649,30 @@ class PaTyBRED(ErrorDetector):
                 return set(), None, None, None
         else:
             return feat_paths, None, None, None
+
+    def save_model(self, path):
+        if not path.endswith(".pkl"):
+            path += ".pkl"
+
+        all_selected_paths = []
+        for paths in self.selected_paths.values():
+            all_selected_paths += paths
+        for p in self.path_matrices.keys():
+            if p not in all_selected_paths:
+                del self.path_matrices[p]
+
+        # Save light model with no precomputed adjacency matrices
+        m = Model()
+        m.models = self.models
+        m.selected_s_types = self.selected_s_types
+        m.selected_o_types = self.selected_o_types
+        m.selected_paths = self.selected_paths
+        m.so_iorels_feat = self.so_iorels_feat
+        m.selected_out_s_feats = self.selected_out_s_feats
+        m.selected_out_o_feats = self.selected_out_o_feats
+        m.selected_in_s_feats = self.selected_in_s_feats
+        m.selected_in_o_feats = self.selected_in_o_feats
+        pickle.dump(m, file(path.replace(".pkl", "-light.pkl"), "wb"))
+
+        # Save full model
+        pickle.dump(self, file(path, "wb"))
