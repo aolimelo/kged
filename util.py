@@ -1,16 +1,18 @@
-import numpy as np
+import bisect
 import sys
-from scipy.sparse import csr_matrix, find, coo_matrix, spmatrix
-from random import randint, random
-from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
-from numpy import argsort
+from Queue import Queue
 from collections import defaultdict as ddict
 from copy import deepcopy
-from Queue import Queue
-import tensorflow as tf
-from tqdm import tqdm
-from numpy.fft import fft, ifft
+from random import randint, random
+
 import matplotlib.pyplot as plt
+import numpy as np
+from numpy import argsort
+from numpy.fft import fft, ifft
+from scipy.sparse import csr_matrix, find, coo_matrix, spmatrix, csc_matrix
+from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
+from tqdm import tqdm
+import copy
 
 
 def dameraulevenshtein(seq1, seq2):
@@ -181,14 +183,31 @@ def load_type_hierarchy(inputDir):
                 pass
     return hierarchy
 
+def load_prop_hierarchy(inputDir):
+    dataset = np.load(inputDir)
+    hierarchy = dataset["prop_hierarchy"].item() if "prop_hierarchy" in dataset else None
+    if hierarchy is not None:
+        for i, n in hierarchy.items():
+            try:
+                n.children = [hierarchy[c] for c in n.children]
+                n.parents = [hierarchy[p] for p in n.parents]
+            except:
+                pass
+    return hierarchy
+
+def load_types_dict(inputDir):
+    dataset = np.load(inputDir)
+    return dataset["types_dict"].item() if "types_dict" in dataset else None
 
 def load_relations_dict(inputDir):
     dataset = np.load(inputDir)
     return dataset["relations_dict"].item() if "relations_dict" in dataset else None
 
+
 def load_entities_dict(inputDir):
     dataset = np.load(inputDir)
     return dataset["entities_dict"].item() if "entities_dict" in dataset else None
+
 
 def jaccard_index(s1, s2):
     return float(len(s1.intersection(s2))) / len(s1.union(s2))
@@ -206,7 +225,108 @@ def in_csc(m, i, j):
     return i in m.indices[m.indptr[j]:m.indptr[j + 1]]
 
 
-# Set Of Keys matrix, read-only
+class lazy_matrix:
+    def __init__(self, m):
+        self.m = m
+        self.ones = set()
+        self.zeros = set()
+
+    def __getitem__(self, key):
+        if key in self.ones:
+            return True
+        if key in self.zeros:
+            return False
+        val = self.m[key[0],key[1]]
+        if val:
+            if len(self.ones) > self.max_set_size:
+                self.ones = set(list(self.ones)[np.random.choice(self.max_set_size, self.max_set_size / 2)])
+            self.ones.add(key)
+        else:
+            if len(self.zeros) > self.max_set_size:
+                self.zeros = set(list(self.zeros)[np.random.choice(self.max_set_size, self.max_set_size / 2)])
+            self.zeros.add(key)
+        return val
+
+    def tocoo(self, copy=True):
+        return self.m.tocoo()
+
+    def getnnz(self):
+        #raise Warning("Reported nnz is wrong (lazy matrix can't know nnz in advance)")
+        return self.m.nnz
+
+    def transpose(self):
+        return lazy_matrix(self.m.transpose())
+
+    def __mul__(self, other):
+        if isinstance(other, lazy_matrix):
+            other = other.m
+        return lazy_matrix(self.m * other)
+
+
+
+class lazy_mult_matrix:
+    def __init__(self, m1, m2, max_set_size=100000):
+        self.shape = (m1.shape[0], m2.shape[1])
+        self.ndim = 2
+        self.m1 = m1 if isinstance(m2, csr_matrix) else m1.tocsr()
+        self.m2 = m2 if isinstance(m2, csc_matrix) else m2.tocsc()
+        self.ones = set()
+        self.zeros = set()
+        rows = (m1 if isinstance(m1, coo_matrix) else m1.tocoo()).row
+        cols = (m2 if isinstance(m2, coo_matrix) else m2.tocoo()).col
+        #self.non_empty_rows = set(rows) if len(rows) < self.shape[0]/2 else None
+        #self.non_empty_cols = set(cols) if len(cols) < self.shape[0]/2 else None
+        self.non_empty_rows = None
+        self.non_empty_cols = None
+        self.max_set_size = max_set_size
+
+    def __getitem__(self, key):
+        assert 0 <= key[0] < self.shape[0] and 0 <= key[1] < self.shape[1]
+        #if (self.non_empty_rows is not None and key[0] not in self.non_empty_rows) \
+        #        or (self.non_empty_rows is not None and key[1] not in self.non_empty_cols):
+        #    return False
+        if key in self.ones:
+            return True
+        if key in self.zeros:
+            return False
+        val = (self.m1[key[0], :] * self.m2[:, key[1]])[0, 0]
+        if val:
+            if len(self.ones) > self.max_set_size:
+                self.ones = set(list(self.ones)[np.random.choice(self.max_set_size, self.max_set_size / 2)])
+            self.ones.add(key)
+        else:
+            if len(self.zeros) > self.max_set_size:
+                self.zeros = set(list(self.zeros)[np.random.choice(self.max_set_size, self.max_set_size / 2)])
+            self.zeros.add(key)
+        return val
+
+    def __mul__(self, other):
+        return lazy_mult_matrix((self.m1 * self.m2), other)
+
+    def tocoo(self, copy=True):
+        return (self.m1 * self.m2).tocoo()
+
+    def getnnz(self):
+        #raise Warning("Reported nnz is wrong (lazy matrix can't know nnz in advance)")
+        return self.m1.nnz * self.m2.nnz
+
+    def transpose(self):
+        T = copy.copy(self)
+        T.__class__  = lazy_mult_matrix_transpose
+        return T
+
+
+class lazy_mult_matrix_transpose(lazy_mult_matrix):
+    def __getitem__(self, key):
+        return super(lazy_mult_matrix_transpose, self).__getitem__((key[1], key[0]))
+
+    def __mul__(self, other):
+        return lazy_mult_matrix((self.m1 * self.m2).T, other)
+
+    def tocoo(self, copy=True):
+        return super(lazy_mult_matrix_transpose, self).tocoo().T
+
+
 class sok_matrix:
     def __init__(self, m):
         assert isinstance(m, coo_matrix)
@@ -289,10 +409,11 @@ def plot_histogram(data, bins=50, title="", xlabel="score", ylabel="count", fig_
 def to_triples(X, order="pso", dtype="array"):
     h, t, r = [], [], []
     for i in range(len(X)):
-        Xi = X[i] if isinstance(X[i], coo_matrix) else X[i].tocoo()
-        r.extend(np.full((X[i].nnz), i))
-        h.extend(X[i].row.tolist())
-        t.extend(X[i].col.tolist())
+        if X[i].nnz > 0:
+            Xi = X[i] if isinstance(X[i], coo_matrix) else X[i].tocoo()
+            r.extend(np.full((Xi.nnz), i))
+            h.extend(Xi.row.tolist())
+            t.extend(Xi.col.tolist())
     if order == "spo":
         triples = zip(h, r, t)
     if order == "pso":
@@ -690,8 +811,6 @@ class RDF2VecSMEval(Emb2Huang03LPEval):
         self.s_filtered_rank_values = {p: {o: {} for o in self.at[p]["ss"].keys()} for p in self.at.keys()}
         n = mdl.n_instances
 
-        sess = tf.Session()
-
         for s in self.all_s:
             if mdl.concat:
                 preds = mdl.clf.predict_proba(np.hstack((np.tile(mdl.embs[s], (mdl.embs.shape[0], 1)), mdl.embs)))
@@ -868,7 +987,7 @@ def level_hierarchy(hier):
         next_level = []
         for n in level:
             for c in n.children:
-                if isinstance(c,DAGNode):
+                if isinstance(c, DAGNode):
                     if c.node_id in remaining:
                         next_level.append(c)
                         remaining.remove(c.node_id)
@@ -880,6 +999,7 @@ def level_hierarchy(hier):
         levels.append(level)
         level = next_level
     return levels
+
 
 def get_roots(hier):
     if not hier:
@@ -961,3 +1081,93 @@ class DAGNode(object):
         tree_node.children = [c.to_tree for c in self.children]
         tree_node.parent = min(self.parents)
         return tree_node
+
+
+class TreeSet(object):
+    """
+    Binary-tree set like java Treeset.
+    Duplicate elements will not be added.
+    When added new element, TreeSet will be sorted automatically.
+    """
+
+    def __init__(self, elements):
+        self._treeset = []
+        self.addAll(elements)
+
+    def addAll(self, elements):
+        for element in elements:
+            if element in self: continue
+            self.add(element)
+
+    def add(self, element):
+        if element not in self:
+            bisect.insort(self._treeset, element)
+
+    def ceiling(self, e):
+        index = bisect.bisect_right(self._treeset, e)
+        if self[index - 1] == e:
+            return e
+        return self._treeset[bisect.bisect_right(self._treeset, e)]
+
+    def floor(self, e):
+        index = bisect.bisect_left(self._treeset, e)
+        if self[index] == e:
+            return e
+        else:
+            return self._treeset[bisect.bisect_left(self._treeset, e) - 1]
+
+    def __getitem__(self, num):
+        return self._treeset[num]
+
+    def __len__(self):
+        return len(self._treeset)
+
+    def clear(self):
+        """
+        Delete all elements in TreeSet.
+        """
+        self._treeset = []
+
+    def clone(self):
+        """
+        Return shallow copy of self.
+        """
+        return TreeSet(self._treeset)
+
+    def remove(self, element):
+        """
+        Remove element if element in TreeSet.
+        """
+        try:
+            self._treeset.remove(element)
+        except ValueError:
+            return False
+        return True
+
+    def __iter__(self):
+        """
+        Do ascending iteration for TreeSet
+        """
+        for element in self._treeset:
+            yield element
+
+    def pop(self, index):
+        return self._treeset.pop(index)
+
+    def __str__(self):
+        return str(self._treeset)
+
+    def __eq__(self, target):
+        if isinstance(target, TreeSet):
+            return self._treeset == target.treeset
+        elif isinstance(target, list):
+            return self._treeset == target
+
+    def __contains__(self, e):
+        """
+        Fast attribution judgment by bisect
+        """
+        try:
+            return e == self._treeset[bisect.bisect_left(self._treeset, e)]
+        except:
+            return False
