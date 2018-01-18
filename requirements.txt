@@ -1,0 +1,6 @@
+tensorflow
+scipy
+sklearn
+tqdm
+matplotlib
+git+https://github.com/mnick/scikit-kge.git
