@@ -37,6 +37,20 @@ python generate_errors.py dataset.npz -pe 0.01 -ek 1
 python detect_errors.py dataset-ek1.npz -m patybred -o ranked_dataset.pkl -sp learned-model.pkl 
 ```
 
+## Generating SHACL Constraints
+
+Implementation of the generation of SHACL-SPARQL relation constraints from the [`paper`](https://dl.acm.org/citation.cfm?doid=3148011.3148033) "Learning SHACL Constraints for Validation of Relation Assertions in Knowledge Graphs" submitted to ESWC 2018.
+
+In order to generate the SHACL constraints it is necessary to learn a PaTyBRED model with decision trees as local classifiers (`-m patybred -clf dt`) when learning the model.
+When generating the constraints there two mandatory parameters: the first is the path to the learned model and the second the path to the original KG dataset, which contains the relation  and type names.
+
+```
+python shacl-sparql.py learned-model.pkl dataset.npz -c 0.99 -ms 10
+```
+
+The parameter `-c` specifies the minimum confidence and `-ms` the minimum support. These parameters are used when pruning the learned decision tree.
+In order to validate your dataset against the set of learned constraints you can use the [`TopBraid`](https://github.com/TopQuadrant/shacl) implementation of SHACL based on Jena
+
 
 ### Datasets
 
