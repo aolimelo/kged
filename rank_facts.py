@@ -1,4 +1,6 @@
 import sys
+sys.path.append("../hmctp/")
+sys.path.append("../scikit-kge/")
 from util import loadTypesNpz, loadGraphNpz, load_type_hierarchy, load_domains, load_ranges, load_relations_dict, \
     short_str, to_triples, plot_histogram
 from sdvalidate import SDValidate
@@ -9,9 +11,10 @@ import numpy as np
 from embeddings import ProjE, SKGEWrapper
 from scipy.stats import rankdata
 from datetime import datetime
+import scipy.sparse as sp
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Type prediction evalutation with cross-validation")
+    parser = ArgumentParser(description="Learns a KG model and ranks its facts based on confidence scores")
     parser.add_argument("input", type=str, default=None, help="path to dataset on which to perform the evaluation")
     parser.add_argument("-o", "--output", type=str, default=None, help="path output ranking file")
     parser.add_argument("-lp", "--load-path", type=str, default=None, help="path to load trained model")
@@ -61,6 +64,7 @@ if __name__ == '__main__':
     ranges = load_ranges(args.input)
     type_hierarchy = load_type_hierarchy(args.input)
 
+    X = [x if isinstance(x, sp.coo_matrix) else x.tocoo() for x in X]
     triples = to_triples(X, order="sop", dtype="list")
 
     n_relations = len(X)
@@ -103,6 +107,15 @@ if __name__ == '__main__':
         ed.learn_model(X, types, type_hierarchy, domains, ranges)
         t2 = datetime.now()
         print("Training time = %f s" % (t2 - t1).total_seconds())
+        if args.save_path is not None:
+            ed.save_model(args.save_path)
+    else:
+        ed = ed.load_model(args.load_path)
+        print("Model loaded from %s" % args.load_path)
+
+    if args.output is None:
+        method_name = args.method + ("-"+args.classifier) if args.method=="patybred" else ""
+        args.output = args.input.replace(".npz", "-ranked-facts-" + method_name + ".pkl")
 
     scores = ed.predict_proba(triples)
 
@@ -113,8 +126,6 @@ if __name__ == '__main__':
     scores.sort()
 
     results = [(id_rank[i], scores[i], sorted_triples[i]) for i in range(len(scores))]
-    if args.output is None:
-        args.output = args.input.replace(".npz", "-ranked-facts-" + args.method + ".pkl")
     pickle.dump(results, open(args.output, "wb"))
 
     if args.plot:

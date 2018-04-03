@@ -4,6 +4,7 @@ from sklearn.covariance import EllipticEnvelope
 from util import to_triples
 from sklearn.ensemble import IsolationForest
 import numpy as np
+import pickle
 
 
 class ErrorDetector(object):
@@ -16,15 +17,16 @@ class ErrorDetector(object):
     def predict(self, triples):
         pass
 
-    def save_model(self, path):
-        pass
 
     def compute_relation_scores(self, r):
         pass
 
+    def save_model(self, path):
+        pickle.dump(self, file(path, "wb"))
+
     @staticmethod
     def load_model(path):
-        pass
+        return pickle.load(file(path, "rb"))
 
     @staticmethod
     def save_scores_histogram(output_path, scores, bins=50):

@@ -322,7 +322,7 @@ class ProjE(ErrorDetector):
     def __l1_normalize(x, dim, epsilon=1e-12, name=None):
         square_sum = tf.reduce_sum(tf.abs(x), [dim], keep_dims=True)
         x_inv_norm = tf.rsqrt(tf.maximum(square_sum, epsilon))
-        return tf.mul(x, x_inv_norm, name=name)
+        return tf.multiply(x, x_inv_norm, name=name)
 
     @staticmethod
     def sampled_softmax(tensor, weights):
@@ -440,8 +440,8 @@ class ProjE(ErrorDetector):
             # triple score
             triple_score = tf.matmul(tf.tanh(hr + self.hr_combination_bias), ent_mat)
 
-            self.triple_score_h = tf.reduce_sum(tf.mul(tf.tanh(hr + self.hr_combination_bias), h), 1)
-            self.triple_score_t = tf.reduce_sum(tf.mul(tf.tanh(hr + self.hr_combination_bias), t), 1)
+            self.triple_score_h = tf.reduce_sum(tf.multiply(tf.tanh(hr + self.hr_combination_bias), h), 1)
+            self.triple_score_t = tf.reduce_sum(tf.multiply(tf.tanh(hr + self.hr_combination_bias), t), 1)
 
             return head_ids, tail_ids, hrt_res, trh_res, triple_score
 
@@ -494,7 +494,8 @@ class ProjE(ErrorDetector):
         self.test_input = test_input
 
         self.sess = tf.Session()
-        tf.initialize_all_variables().run(session=self.sess)
+        #tf.initialize_all_variables().run(session=self.sess)
+        tf.global_variables_initializer().run(session=self.sess)
 
         self.saver = tf.train.Saver()
 

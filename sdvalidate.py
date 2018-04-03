@@ -1,8 +1,58 @@
+import pickle
+
 import numpy as np
 from numpy import linalg
+from scipy.sparse import csr_matrix, coo_matrix, hstack
+
 from errordetector import ErrorDetector
-import pickle
-from scipy.sparse import csr_matrix, coo_matrix, vstack, hstack
+
+
+class DomRanValidate(ErrorDetector):
+    def __init__(self, conf=0.95):
+        self.conf = conf
+
+    def learn_model(self, X, types, type_hierarchy=None, domains=None, ranges=None):
+        self.types = types
+        types_csc = types.tocsc()
+
+        self.domains = {}
+        self.ranges = {}
+
+        self.domain_probs = {}
+        self.range_probs = {}
+
+        for r in range(len(X)):
+            ss = list(set(X[r].row))
+            oo = list(set(X[r].col))
+
+            domain_candidates = np.where(types[ss].sum(axis=0) > self.conf * len(ss))[1]
+            range_candidates = np.where(types[oo].sum(axis=0) > self.conf * len(oo))[1]
+
+            if len(domain_candidates) > 0:
+                domain_type_counts = [types_csc[:, t].nnz for t in domain_candidates]
+                domain_r = domain_candidates[np.argmin(domain_type_counts)]
+                self.domains[r] = domain_r
+                prob = float(types[ss, domain_r].nnz) / len(ss)
+                self.domain_probs[r] = (1 - prob, prob)
+
+            if len(range_candidates) > 0:
+                range_type_counts = [types_csc[:, t].nnz for t in range_candidates]
+                range_r = range_candidates[np.argmin(range_type_counts)]
+                self.ranges[r] = range_r
+                prob = float(types[oo, range_r].nnz) / len(oo)
+                self.range_probs[r] = (1 - prob, prob)
+
+    def predict_proba(self, triples):
+        # print("computing probabilities")
+        scores = []
+        for s, o, p in triples:
+            domain_prob = self.domain_probs[p][self.types[s, self.domains[p]]] if p in self.domains else 1.0
+            range_prob = self.range_probs[p][self.types[o, self.ranges[p]]] if p in self.ranges else 1.0
+            scores.append(min([domain_prob, range_prob]))
+        return np.array(scores).reshape((-1, 1))
+
+    def predict(self, triples):
+        return (self.predict_proba(triples) > 0.5).astype(float)
 
 
 class SDValidate(ErrorDetector):
@@ -113,8 +163,3 @@ class SDValidate(ErrorDetector):
 
     def save_model(self, path):
         pickle.dump(self, file(path, "wb"))
-
-    @staticmethod
-    def load_model(path):
-        ed = pickle.load(file(path, "rb"))
-        return ed

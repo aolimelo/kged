@@ -21,7 +21,7 @@ def filter_ranks(ranks):
         count += 1
         next_rank = ranks[i + 1] if (i + 1) < len(ranks) else float("inf")
         if next_rank > ranks[i]:
-            filtered_ranks[(i - count + 1):(i + 1)] = ranks[i] - filtered - (count - 1.0) / 2
+            filtered_ranks[(i - count + 1):(i + 1)] = ranks[i] - filtered - (count - 2.0) / 2
             filtered = filtered + count
             count = 0
     return filtered_ranks
@@ -107,6 +107,7 @@ if __name__ == '__main__':
     ranges = load_ranges(args.input)
     type_hierarchy = load_type_hierarchy(args.input)
 
+
     triples = to_triples(X, order="sop", dtype="list")
 
     errors = np.load(args.input)["errors"]
@@ -115,7 +116,7 @@ if __name__ == '__main__':
 
     n_relations = len(X)
     n_entities = X[0].shape[0]
-    n_types = types.shape[1] if type is not None else 0
+    n_types = types.shape[1] if types is not None else 0
 
     print("%d entities, %d relations, %d types" % (n_entities, n_relations, n_types))
 
