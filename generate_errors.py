@@ -119,7 +119,7 @@ if __name__ == '__main__':
     output_path = args.input.replace(".npz", "-errdet-ek%d-p%f.npz" % (args.error_kind, args.p_error))
 
     d = np.load(args.input)
-    X = None
+    X = d["data"]
     types = d["types"].item()
     domains = d["domains"].item()
     ranges = d["ranges"].item()
