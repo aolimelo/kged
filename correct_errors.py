@@ -1,5 +1,3 @@
-from util import loadTypesNpz, loadGraphNpz, load_type_hierarchy, load_domains, load_ranges, load_relations_dict, \
-    load_entities_dict
 from sdvalidate import SDValidate
 from argparse import ArgumentParser
 from patybred import PaTyBRED
@@ -176,13 +174,15 @@ if __name__ == '__main__':
     hist_path = args.input.replace(".npz", "-" + args.method + "-scores-dist.png")
     scores_path = args.input.replace(".npz", "-" + args.method + "-scores.pkl")
 
+    d = np.load(args.input)
     X = None
-    types = loadTypesNpz(args.input)
-    domains = load_domains(args.input)
-    ranges = load_ranges(args.input)
-    type_hierarchy = load_type_hierarchy(args.input)
-    ents_dict = load_entities_dict(args.input)
-    rels_dict = load_relations_dict(args.input)
+    types = d["types"].item()
+    domains = d["domains"].item()
+    ranges = d["domains"].item()
+    ents_dict = d["entities_dict"](args.input)
+    rels_dict = d["relations_dict"](args.input)
+    type_hierarchy = None
+
 
     if not isinstance(ents_dict.keys()[0], int):
         ents_dict = {k: v for v, k in ents_dict.items()}
@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
 
     if args.load_path is None:
-        X = loadGraphNpz(args.input)
+        X = d["data"]
         n_relations = len(X)
         n_entities = X[0].shape[0]
         n_types = types.shape[1] if types is not None else 0
@@ -242,7 +242,7 @@ if __name__ == '__main__':
 
     if args.triple_scores is None:
         if X is None:
-            X = loadGraphNpz(args.input)
+            X = d["data"]
         triples = to_triples(X, order="sop", dtype="list")
         t1 = datetime.now()
         scores = ed.predict_proba(triples)

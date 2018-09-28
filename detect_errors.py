@@ -1,5 +1,4 @@
 import sys
-from util import loadTypesNpz, loadGraphNpz, load_type_hierarchy, load_domains, load_ranges
 from sdvalidate import SDValidate
 from argparse import ArgumentParser
 from patybred import PaTyBRED
@@ -101,11 +100,13 @@ if __name__ == '__main__':
     hist_path = args.input.replace(".npz", "-" + args.method + "-scores-dist.png")
     scores_path = args.input.replace(".npz", "-" + args.method + "-scores.pkl")
 
-    X = loadGraphNpz(args.input)
-    types = loadTypesNpz(args.input)
-    domains = load_domains(args.input)
-    ranges = load_ranges(args.input)
-    type_hierarchy = load_type_hierarchy(args.input)
+
+    d = np.load(args.input)
+    X = d["data"]
+    types = d["types"].item()
+    domains = d["domains"].item()
+    ranges = d["domains"].item()
+    type_hierarchy = None
 
 
     triples = to_triples(X, order="sop", dtype="list")

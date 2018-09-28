@@ -1,12 +1,10 @@
 import sys
-sys.path.append("../hmctp/")
-sys.path.append("../scikit-kge/")
-from util import loadTypesNpz, loadGraphNpz, load_type_hierarchy, load_domains, load_ranges, load_relations_dict, \
-    short_str, to_triples, plot_histogram
+from util import short_str, to_triples, plot_histogram
 from sdvalidate import SDValidate
 import pickle
 from argparse import ArgumentParser
 from patybred import PaTyBRED
+from bblbred import BblBRED
 import numpy as np
 from embeddings import ProjE, SKGEWrapper
 from scipy.stats import rankdata
@@ -24,7 +22,7 @@ if __name__ == '__main__':
     parser.add_argument("-negw", "--neg-weight", type=float, default=1, help="negative examples selection weight")
     parser.add_argument("-nneg", "--n-negatives", type=int, default=1, help="negative examples selection weight")
     parser.add_argument("-mpl", "--max-path-length", type=int, default=2, help="maximum path length (PRA)")
-    parser.add_argument("-mppl", "--max-paths-per-level", type=int, default=sys.maxint,
+    parser.add_argument("-mppl", "--max-paths-per-level", type=int, default=sys.maxsize,
                         help="maximum number of paths per level (PRA), prune the potentially large search space with heuristic based on the number of intersecting object and subject of a path link")
     parser.add_argument("-minsup", "--minimum-support", type=float, default=0.001, help="minimum path support (PRA)")
     parser.add_argument("-d", "--dimensions", type=int, default=100, help="number of embeddings dimensions")
@@ -53,16 +51,33 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    method_name = args.method + (("-" + args.classifier) if args.method == "patybred" else "")
+    if args.output is None:
+        args.output = args.input.replace(".npz", "-ranked-facts-" + method_name + ".pkl")
+    if args.save_path is None:
+        args.save_path = args.input.replace(".npz", "-errdet-model-" + method_name + ".pkl")
+
     print(args)
 
     hist_path = args.input.replace(".npz", "-" + args.method + "-scores-dist.png")
     scores_path = args.input.replace(".npz", "-" + args.method + "-scores.pkl")
 
-    X = loadGraphNpz(args.input)
-    types = loadTypesNpz(args.input)
-    domains = load_domains(args.input)
-    ranges = load_ranges(args.input)
-    type_hierarchy = load_type_hierarchy(args.input)
+    d = np.load(args.input)
+
+    X = d["data"]
+    types = d["types"].item()
+    domains = d["domains"].item()
+    ranges = d["domains"].item()
+    type_hierarchy = None
+
+    ents_dict = d["entities_dict"].item()
+    types_dict = d["types_dict"].item()
+
+    if not isinstance(ents_dict.keys()[0],int):
+        ents_dict = {k:v for v,k in ents_dict.items()}
+    if not isinstance(types_dict.keys()[0],int):
+        types_dict = {k:v for v,k in types_dict.items()}
+
 
     X = [x if isinstance(x, sp.coo_matrix) else x.tocoo() for x in X]
     triples = to_triples(X, order="sop", dtype="list")
@@ -75,6 +90,21 @@ if __name__ == '__main__':
             ed = SDValidate()
         else:
             ed = SDValidate.load_model(args.load_path)
+    if args.method == "bblbred":
+        prefLabels = pickle.load(file(args.input.replace(".npz","-prefLabels-dict.pkl"),"rb"))
+        definitions = pickle.load(file(args.input.replace(".npz", "-definitions-dict.pkl"), "rb"))
+        ed = BblBRED(prefLabels=prefLabels, definitions=definitions, ents_dict=ents_dict, types_dict=types_dict,
+                      max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=True,
+                      n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
+                      min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
+                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
+    if args.method == "pabred":
+        ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
+                      n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
+                      min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
+                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
     if args.method == "pabred":
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
@@ -113,9 +143,6 @@ if __name__ == '__main__':
         ed = ed.load_model(args.load_path)
         print("Model loaded from %s" % args.load_path)
 
-    if args.output is None:
-        method_name = args.method + ("-"+args.classifier) if args.method=="patybred" else ""
-        args.output = args.input.replace(".npz", "-ranked-facts-" + method_name + ".pkl")
 
     scores = ed.predict_proba(triples)
 
@@ -130,7 +157,7 @@ if __name__ == '__main__':
 
     if args.plot:
         plot_histogram(scores, title="Scores distribution (all facts)", fig_path="alltriples")
-        rel_dict = load_relations_dict(args.input)
+        rel_dict = d["relations_dict"].item()
         rel_dict = {k: v for v, k in rel_dict.items()}
         p_scores = [[] for p in range(n_relations)]
         for i, (s, o, p) in enumerate(triples):
