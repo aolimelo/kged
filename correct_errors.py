@@ -178,9 +178,9 @@ if __name__ == '__main__':
     X = None
     types = d["types"].item()
     domains = d["domains"].item()
-    ranges = d["domains"].item()
-    ents_dict = d["entities_dict"](args.input)
-    rels_dict = d["relations_dict"](args.input)
+    ranges = d["ranges"].item()
+    ents_dict = d["entities_dict"].item()
+    rels_dict = d["relations_dict"].item()
     type_hierarchy = None
 
 

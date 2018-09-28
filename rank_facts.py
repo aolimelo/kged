@@ -67,7 +67,7 @@ if __name__ == '__main__':
     X = d["data"]
     types = d["types"].item()
     domains = d["domains"].item()
-    ranges = d["domains"].item()
+    ranges = d["ranges"].item()
     type_hierarchy = None
 
     ents_dict = d["entities_dict"].item()
