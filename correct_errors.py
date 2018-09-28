@@ -121,7 +121,7 @@ def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01,
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Type prediction evalutation with cross-validation")
+    parser = ArgumentParser(description="Detects errors and propose corrections for the detected errors")
     parser.add_argument("input", type=str, default=None, help="path to dataset on which to perform the evaluation")
     parser.add_argument("-disamb", "--disambiguation", type=str, default=None,
                         help="path to pkl of disambiguation object")

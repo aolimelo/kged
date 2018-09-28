@@ -118,15 +118,16 @@ if __name__ == '__main__':
 
     output_path = args.input.replace(".npz", "-errdet-ek%d-p%f.npz" % (args.error_kind, args.p_error))
 
-    X = loadGraphNpz(args.input)
-    types = loadTypesNpz(args.input)
-    domains = load_domains(args.input)
-    ranges = load_ranges(args.input)
-    types_dict = load_types_dict(args.input)
-    entities_dict = load_entities_dict(args.input)
-    relations_dict = load_relations_dict(args.input)
-    type_hier = load_type_hierarchy(args.input)
-    prop_hier = load_prop_hierarchy(args.input)
+    d = np.load(args.input)
+    X = None
+    types = d["types"].item()
+    domains = d["domains"].item()
+    ranges = d["ranges"].item()
+    entities_dict = d["entities_dict"].item()
+    relations_dict = d["relations_dict"].item()
+    types_dict = d["types_dict"].item()
+    type_hier = None
+    prop_hier = None
 
     entities_dict = {k: v for v,k in entities_dict.items()}
     relations_dict = {k: v for v, k in relations_dict.items()}

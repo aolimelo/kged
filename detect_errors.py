@@ -56,7 +56,9 @@ def evaluate(scores, error_ids, plot_pr=False):
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Type prediction evalutation with cross-validation")
+    parser = ArgumentParser(description="Evaluation for the error detection task:\n"
+                                        "It requires as input a dataset which contains a list of known errors."
+                                        "Errors can be synthesized with 'generate_errors.py'.")
     parser.add_argument("input", type=str, default=None, help="path to dataset on which to perform the evaluation")
     parser.add_argument("-e", "--embeddings", type=str, default=None, help="path to dataset with hole embeddings")
     parser.add_argument("-lp", "--load-path", type=str, default=None, help="path to load trained model")
