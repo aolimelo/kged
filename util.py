@@ -5,7 +5,6 @@ from collections import defaultdict as ddict
 from copy import deepcopy
 from random import randint, random
 
-import matplotlib.pyplot as plt
 import numpy as np
 from numpy import argsort
 from numpy.fft import fft, ifft
@@ -391,19 +390,6 @@ class sli_matrix:
 
 def ccorr(a, b):
     return ifft(np.conj(fft(a)) * fft(b)).real
-
-
-def plot_histogram(data, bins=50, title="", xlabel="score", ylabel="count", fig_path=None):
-    n, bins, patches = plt.hist(data, bins=bins, facecolor='gray')
-
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    if fig_path is not None:
-        plt.savefig(fig_path)
-    else:
-        plt.show()
-    plt.close()
 
 
 def to_triples(X, order="pso", dtype="array"):
