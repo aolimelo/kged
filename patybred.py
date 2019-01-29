@@ -1,8 +1,6 @@
 import sys
 import pickle
 import gc
-from lru import LRUCacheDict
-import shelve
 from tqdm import tqdm
 from scipy.sparse import coo_matrix, csr_matrix, csc_matrix, lil_matrix, hstack
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
@@ -110,24 +108,12 @@ class PaTyBRED(ErrorDetector):
     def get_path_matrix(self, path):
         if not isinstance(path, tuple):
             path = tuple(path)
-        if self.dump_mem:
-            if path not in self.path_matrices_cache:
-                m = self.path_matrices[str(path)]
-                self.path_matrices_cache[path] = m
-                return m
-            else:
-                return self.path_matrices_cache[path]
-        else:
-            return self.path_matrices[path]
+        return self.path_matrices[path]
 
     def add_path_matrix(self, path, m):
         if not isinstance(path, tuple):
             path = tuple(path)
-        if self.dump_mem:
-            self.path_matrices[str(path)] = m
-            self.path_matrices_cache[path] = m
-        else:
-            self.path_matrices[path] = m
+        self.path_matrices[path] = m
         self.matrix_paths.add(path)
 
     def path_relevance(self, p1, r):
@@ -156,9 +142,8 @@ class PaTyBRED(ErrorDetector):
     def learn_model(self, X, types, type_hierarchy=None, domains=None, ranges=None):
         hash_id = (sum([xi.nnz for xi in X]) + bool(types is None) + bool(type_hierarchy is None) + bool(
             domains is None) + bool(ranges is None)) * len(X)
-        self.path_matrices_cache = LRUCacheDict(max_size=self.max_feats * 2)
 
-        self.path_matrices = {} if not self.dump_mem else shelve.open("pracache-%d" % hash_id)
+        self.path_matrices = {}
 
         self.n_instances = X[0].shape[0]
         self.n_relations = len(X)
