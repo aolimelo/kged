@@ -4,7 +4,6 @@ from sdvalidate import SDValidate
 import pickle
 from argparse import ArgumentParser
 from patybred import PaTyBRED
-from bblbred import BblBRED
 import numpy as np
 from embeddings import ProjE, SKGEWrapper
 from scipy.stats import rankdata
@@ -88,15 +87,6 @@ if __name__ == '__main__':
             ed = SDValidate()
         else:
             ed = SDValidate.load_model(args.load_path)
-    if args.method == "bblbred":
-        prefLabels = pickle.load(file(args.input.replace(".npz","-prefLabels-dict.pkl"),"rb"))
-        definitions = pickle.load(file(args.input.replace(".npz", "-definitions-dict.pkl"), "rb"))
-        ed = BblBRED(prefLabels=prefLabels, definitions=definitions, ents_dict=ents_dict, types_dict=types_dict,
-                      max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=True,
-                      n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
-                      min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
-                      convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
     if args.method == "pabred":
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
