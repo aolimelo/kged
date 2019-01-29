@@ -1,5 +1,5 @@
 import sys
-from util import short_str, to_triples, plot_histogram
+from util import short_str, to_triples
 from sdvalidate import SDValidate
 import pickle
 from argparse import ArgumentParser
@@ -41,11 +41,9 @@ if __name__ == '__main__':
                         help="convert csr_matrix to sok_matrix make cell access faster")
     parser.add_argument("-mc", "--mem-cache", dest="mem_cache", action="store_true",
                         help="use cache and evict to disk to reduce memory usage")
-    parser.add_argument("-pp", "--plot", dest="plot", action="store_true", help="plot PRAUC")
     parser.add_argument("-ut", "--use-types", dest="use_types", action="store_true",
                         help="whether to use type assertions for learning embeddings")
     parser.set_defaults(mem_cache=False)
-    parser.set_defaults(plot=False)
     parser.set_defaults(use_types=False)
     parser.set_defaults(sok=False)
 
@@ -154,17 +152,3 @@ if __name__ == '__main__':
 
     results = [(id_rank[i], scores[i], sorted_triples[i]) for i in range(len(scores))]
     pickle.dump(results, open(args.output, "wb"))
-
-    if args.plot:
-        plot_histogram(scores, title="Scores distribution (all facts)", fig_path="alltriples")
-        rel_dict = d["relations_dict"].item()
-        rel_dict = {k: v for v, k in rel_dict.items()}
-        p_scores = [[] for p in range(n_relations)]
-        for i, (s, o, p) in enumerate(triples):
-            p_scores[p].append(scores[i])
-
-        for p in range(n_relations):
-            rel_name = short_str(rel_dict[p])
-            print(rel_name, len(p_scores[p]))
-            plot_histogram(p_scores[p], title="Scores distribution  (%s relation)" % rel_name,
-                           fig_path="%s.png" % rel_name)
