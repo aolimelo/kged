@@ -27,7 +27,8 @@ def filter_entity(e):
 
 if __name__ == '__main__':
 
-    parser = ArgumentParser()
+    parser = ArgumentParser("Loads Knowledge Graph from NT or TSV file into a tensor representation in numpy's "
+                            "NPZ format, which can be used to train the models.")
     parser.add_argument("input", type=str, default=None, help="Path to input file (nt or tsv)")
     parser.add_argument("-o", "--output", type=str, default=None, help="Path to output npz file")
     parser.add_argument("-nocat", "--no-categories", dest="nocat", action="store_true",

@@ -11,7 +11,7 @@ from datetime import datetime
 import scipy.sparse as sp
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Learns a KG model and ranks its facts based on confidence scores")
+    parser = ArgumentParser(description="Learns a KG model and ranks its facts based on the models's confidence scores")
     parser.add_argument("input", type=str, default=None, help="path to dataset on which to perform the evaluation")
     parser.add_argument("-o", "--output", type=str, default=None, help="path output ranking file")
     parser.add_argument("-lp", "--load-path", type=str, default=None, help="path to load trained model")
