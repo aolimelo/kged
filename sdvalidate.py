@@ -150,7 +150,6 @@ class SDValidate(ErrorDetector):
         return scores
 
     def predict_proba(self, triples):
-        # print("computing probabilities")
         scores = []
         for s, o, p in triples:
             fact_ot = self.types[o, :].todense().astype(float)
@@ -162,4 +161,4 @@ class SDValidate(ErrorDetector):
         return (self.predict_proba(triples) > 0.5).astype(float)
 
     def save_model(self, path):
-        pickle.dump(self, file(path, "wb"))
+        pickle.dump(self, open(path, "wb"))

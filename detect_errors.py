@@ -1,36 +1,32 @@
-import sys
 from sdvalidate import SDValidate
 from argparse import ArgumentParser
-from patybred import PaTyBRED
-from errordetector import OutlierErrorDetector
-from embeddings import SKGEWrapper, ProjE
-from util import to_triples
-import numpy as np
-from sklearn.metrics import roc_auc_score, precision_recall_curve, auc, roc_curve
-from matplotlib import pyplot as plt
-from scipy.stats import rankdata
 from datetime import datetime
+
+import numpy as np
+from scipy.stats import rankdata
+from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
+
+from embeddings import SKGEWrapper, ProjE
+from errordetector import OutlierErrorDetector
+from patybred import PaTyBRED
+from sdvalidate import SDValidate
+from util import to_triples
 
 
 def filter_ranks(ranks):
     filtered_ranks = np.zeros(len(ranks))
     filtered = 0
-    count = 0
     for i in range(len(ranks)):
-        count += 1
-        next_rank = ranks[i + 1] if (i + 1) < len(ranks) else float("inf")
-        if next_rank > ranks[i]:
-            filtered_ranks[(i - count + 1):(i + 1)] = ranks[i] - filtered - (count - 2.0) / 2
-            filtered = filtered + count
-            count = 0
+        filtered_ranks[i] = ranks[i] - filtered
+        filtered += 1
     return filtered_ranks
 
 
-def evaluate(scores, error_ids, plot_pr=False):
+def evaluate(scores, error_ids):
     print("%d facts with %d errors" % (scores.shape[0], len(error_ids)))
 
     scores = np.ravel(scores)
-    id_rank = rankdata(scores)
+    id_rank = rankdata(scores, method='ordinal')
     error_ranks = np.array([i for id, i in enumerate(id_rank) if id in error_ids])
     error_ranks.sort()
     mean_rank = error_ranks.mean()
@@ -44,10 +40,6 @@ def evaluate(scores, error_ids, plot_pr=False):
     rocauc = roc_auc_score(y, -scores)
     p, r, ts = precision_recall_curve(y, -scores)
     prauc = auc(r, p)
-
-    if plot_pr:
-        plt.plot(r, p)
-        plt.show()
 
     print("FMeanRank = %f \t FMRR = %f \t MeanRank = %f \t MRR = %f \t ROCAUC = %f \t PRAUC = %f" % (
         fmean_rank, fmrr, mean_rank, mrr, rocauc, prauc))
@@ -85,9 +77,6 @@ if __name__ == '__main__':
 
     parser.add_argument("-sok", "--convert-to-sok", dest="sok", action="store_true",
                         help="convert csr_matrix to sok_matrix make cell access faster")
-    parser.add_argument("-mc", "--mem-cache", dest="mem_cache", action="store_true",
-                        help="use cache and evict to disk to reduce memory usage")
-    parser.add_argument("-pp", "--plot", dest="plot", action="store_true", help="plot PRAUC")
     parser.add_argument("-ut", "--use-types", dest="use_types", action="store_true",
                         help="whether to use type assertions for learning embeddings")
     parser.set_defaults(mem_cache=False)
@@ -102,18 +91,16 @@ if __name__ == '__main__':
     hist_path = args.input.replace(".npz", "-" + args.method + "-scores-dist.png")
     scores_path = args.input.replace(".npz", "-" + args.method + "-scores.pkl")
 
-
-    d = np.load(args.input)
+    d = np.load(args.input, allow_pickle=True)
     X = d["data"]
     types = d["types"].item()
     domains = d["domains"].item()
     ranges = d["ranges"].item()
     type_hierarchy = None
 
-
     triples = to_triples(X, order="sop", dtype="list")
 
-    errors = np.load(args.input)["errors"]
+    errors = np.load(args.input, allow_pickle=True)["errors"]
     errors = [tuple(t) for t in errors]
     error_ids = [i for i, e in enumerate(triples) if e in errors]
 
@@ -132,21 +119,21 @@ if __name__ == '__main__':
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode,
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
     if args.method == "tybred":
         ed = PaTyBRED(max_depth=0, max_paths_per_level=0, clf_name=args.classifier, so_type_feat=True,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode,
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
     if args.method == "patybred":
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=True,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode,
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
     if args.method in ["transe", "hole", "rescal"]:
@@ -166,7 +153,7 @@ if __name__ == '__main__':
     t2 = datetime.now()
     print("Prediction time = %f" % (t2 - t1).total_seconds())
 
-    evaluate(scores, error_ids, plot_pr=args.plot)
+    evaluate(scores, error_ids)
 
     if args.method in ["proje", "transe", "hole", "rescal"]:
         oed = OutlierErrorDetector(ed, method=args.outlier_detection_method, outlier_per_relation=True)

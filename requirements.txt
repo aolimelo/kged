@@ -1,10 +1,8 @@
+nose
 tensorflow
 scipy
 sklearn
 tqdm
-matplotlib
 git+https://github.com/mnick/scikit-kge.git
-pympler
-lru-dict
-queuelib
 rdflib
+unidecode

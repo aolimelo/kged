@@ -1,31 +1,32 @@
-import sys
-import pickle
 import gc
-from tqdm import tqdm
+import pickle
+import signal
+from datetime import datetime
+
+import numpy as np
 from scipy.sparse import coo_matrix, csr_matrix, csc_matrix, lil_matrix, hstack
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import LogisticRegression
-from util import generate_negatives, in_csr, in_csc, sok_matrix, jaccard_index, jaccard_distance, is_symmetric, \
-    to_triples, lazy_mult_matrix, lazy_matrix
-from sklearn.svm import OneClassSVM
 from sklearn.covariance import EllipticEnvelope
 from sklearn.ensemble import IsolationForest
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.feature_selection import mutual_info_classif, chi2, SelectKBest, SelectFromModel
-from datetime import datetime
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import OneClassSVM
 from sklearn.svm import SVC
-from pympler import asizeof
-import numpy as np
+from sklearn.tree import DecisionTreeClassifier
+from tqdm import tqdm
+
 from errordetector import ErrorDetector
-import signal
-import warnings
+from util import generate_negatives, in_csr, in_csc, sok_matrix, is_symmetric, \
+    to_triples, lazy_matrix
 
 
 class Model:
     pass
 
+
 def handler(signum, frame):
     raise Exception("Path computation timeout")
+
 
 class PaTyBRED(ErrorDetector):
     """
@@ -38,8 +39,7 @@ class PaTyBRED(ErrorDetector):
                  lfs=None, max_feats=float("inf"), emb_model=None, min_sup=0.001, max_paths_per_level=float("inf"),
                  max_pos_train=2500,
                  learn_weights=True, debug=False, clf_name="lgr", path_selection_mode="m2", sparse_train_data=True,
-                 max_fs_data_size=250,
-                 reduce_mem_usage=False, convert_to_sok=False, lazy=False):
+                 max_fs_data_size=250, convert_to_sok=False, lazy=False):
         self.alpha = alpha
         self.max_depth = max_depth
         self.rel_dict = rel_dict
@@ -60,7 +60,6 @@ class PaTyBRED(ErrorDetector):
         self.max_pos_train = max_pos_train
         self.sparse_train_data = sparse_train_data
         self.max_fs_data_size = max_fs_data_size
-        self.dump_mem = reduce_mem_usage
         self.selected_paths = {}
         self.selected_s_types, self.selected_o_types = {}, {}
         self.selected_out_s_feats, self.selected_out_o_feats, self.selected_in_s_feats, self.selected_in_o_feats = {}, {}, {}, {}
@@ -138,7 +137,6 @@ class PaTyBRED(ErrorDetector):
                     if self.path_selection_mode == "m2":
                         return len(inter) * len(s1.union(o2))
 
-
     def learn_model(self, X, types, type_hierarchy=None, domains=None, ranges=None):
         hash_id = (sum([xi.nnz for xi in X]) + bool(types is None) + bool(type_hierarchy is None) + bool(
             domains is None) + bool(ranges is None)) * len(X)
@@ -206,7 +204,6 @@ class PaTyBRED(ErrorDetector):
         t1 = datetime.now()
 
         print("Computing paths adjacency matrices")
-        matrices_size = 0
         for r in range(self.n_relations):
             if self.X[r].getnnz() and self.X[r].getnnz() >= min_sup:
                 singletons.append(r)
@@ -215,9 +212,6 @@ class PaTyBRED(ErrorDetector):
                     singletons.append(inverses[r])
                     l_paths.add(tuple([inverses[r]]))
             m = self.X[r].astype(bool)
-            matrices_size += asizeof.asizeof(m)
-            sys.stdout.write('\r%d' % matrices_size)
-            sys.stdout.flush()
             self.add_path_matrix([r], m)
             self.add_path_matrix([inverses[r]], m.transpose())
             rows = set(np.where(self.X[r].indptr[1:] > self.X[r].indptr[:-1])[0])
@@ -232,6 +226,7 @@ class PaTyBRED(ErrorDetector):
 
         all_paths.append(list(l_paths))
 
+        print(depth, self.max_depth, l_paths)
 
         while depth < self.max_depth and l_paths:
             candidates = {}
@@ -274,15 +269,12 @@ class PaTyBRED(ErrorDetector):
                     signal.alarm(0)
 
                     if prod.getnnz() and min_sup <= prod.getnnz() < self.max_nnz:
-                        matrices_size += asizeof.asizeof(prod)
-                        sys.stdout.write('\r%d' % matrices_size)
-                        sys.stdout.flush()
                         new_path = list(path) + [r2]
                         lp1_paths.add(tuple(new_path))
                         lp1_paths.add(tuple([inverses[i] for i in reversed(new_path)]))
                         self.add_path_matrix(new_path, prod)
                         self.add_path_matrix([inverses[i] for i in reversed(new_path)], prod.transpose())
-                        if self.so_iorels_feat or depth+1 < self.max_depth:
+                        if self.so_iorels_feat or depth + 1 < self.max_depth:
                             if self.lazy:
                                 rows = set(np.where(prod.m.indptr[1:] > prod.m.indptr[:-1])[0])
                                 cols = set(prod.m.indices)
@@ -294,7 +286,7 @@ class PaTyBRED(ErrorDetector):
                         num_paths += 1
 
                     pbar.update(1)
-                except Exception, exc:
+                except Exception as exc:
                     print(exc)
 
             pbar.close()
@@ -375,7 +367,7 @@ class PaTyBRED(ErrorDetector):
         if self.clf_name == "lgr":
             return LogisticRegression(penalty="l2", solver="liblinear", n_jobs=-1)
         if self.clf_name == "rf":
-            return RandomForestClassifier()
+            return RandomForestClassifier(n_estimators=10)
         if self.clf_name == "dt":
             return DecisionTreeClassifier()
         if self.clf_name == "svm":
@@ -657,7 +649,7 @@ class PaTyBRED(ErrorDetector):
         m.selected_out_o_feats = self.selected_out_o_feats
         m.selected_in_s_feats = self.selected_in_s_feats
         m.selected_in_o_feats = self.selected_in_o_feats
-        pickle.dump(m, file(path.replace(".pkl", "-light.pkl"), "wb"))
+        pickle.dump(m, open(path.replace(".pkl", "-light.pkl"), "wb"))
 
         # Save full model
-        pickle.dump(self, file(path, "wb"))
+        pickle.dump(self, open(path, "wb"))

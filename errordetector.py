@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from sklearn.svm import OneClassSVM
 from sklearn.covariance import EllipticEnvelope
 from util import to_triples
@@ -22,18 +21,11 @@ class ErrorDetector(object):
         pass
 
     def save_model(self, path):
-        pickle.dump(self, file(path, "wb"))
+        pickle.dump(self, open(path, "wb"))
 
     @staticmethod
     def load_model(path):
-        return pickle.load(file(path, "rb"))
-
-    @staticmethod
-    def save_scores_histogram(output_path, scores, bins=50):
-        n, bins, patches = plt.hist(scores, bins, range=(min(scores), max(scores)), normed=1, facecolor='green',
-                                    alpha=0.75)
-        plt.savefig(output_path)
-        return n, bins, patches
+        return pickle.load(open(path, "rb"))
 
 
 class OutlierErrorDetector(ErrorDetector):

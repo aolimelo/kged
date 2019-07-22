@@ -1,6 +1,5 @@
 import bisect
 import sys
-from Queue import Queue
 from collections import defaultdict as ddict
 from copy import deepcopy
 from random import randint, random
@@ -120,7 +119,7 @@ def is_symmetric(m):
 
 
 def loadGraphNpz(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     data = dataset["data"]
     if isinstance(data[0], spmatrix):
         return data.tolist()
@@ -145,7 +144,7 @@ def loadGraphNpz(inputDir):
 
 
 def loadTypesNpz(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     D_type = None
     if "typeshape" in dataset and "typedata" in dataset:
         typeshape = dataset["typeshape"]
@@ -161,17 +160,17 @@ def loadTypesNpz(inputDir):
 
 
 def load_domains(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     return dataset["domains"].item() if "domains" in dataset else None
 
 
 def load_ranges(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     return dataset["ranges"].item() if "ranges" in dataset else None
 
 
 def load_type_hierarchy(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     hierarchy = dataset["type_hierarchy"].item() if "type_hierarchy" in dataset else None
     if hierarchy is not None:
         for i, n in hierarchy.items():
@@ -183,7 +182,7 @@ def load_type_hierarchy(inputDir):
     return hierarchy
 
 def load_prop_hierarchy(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     hierarchy = dataset["prop_hierarchy"].item() if "prop_hierarchy" in dataset else None
     if hierarchy is not None:
         for i, n in hierarchy.items():
@@ -195,16 +194,16 @@ def load_prop_hierarchy(inputDir):
     return hierarchy
 
 def load_types_dict(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     return dataset["types_dict"].item() if "types_dict" in dataset else None
 
 def load_relations_dict(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     return dataset["relations_dict"].item() if "relations_dict" in dataset else None
 
 
 def load_entities_dict(inputDir):
-    dataset = np.load(inputDir)
+    dataset = np.load(inputDir, allow_pickle=True)
     return dataset["entities_dict"].item() if "entities_dict" in dataset else None
 
 
@@ -1049,14 +1048,14 @@ class DAGNode(object):
 
     def get_all_parents(self):
         parents = set()
-        queue = Queue()
-        queue.put(self)
+        queue = []
+        queue.append(self)
         while not queue.empty():
-            nd = queue.get()
+            nd, queue = queue[0], queue[1:]
             for p in nd.parents:
                 if p not in parents:
                     parents.add(p)
-                    queue.put(p)
+                    queue.append(p)
         return parents
 
     def get_all_parent_ids(self):

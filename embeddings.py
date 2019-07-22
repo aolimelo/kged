@@ -1,7 +1,7 @@
 import math
 import os
 from util import to_triples
-from multiprocessing import Queue, Process, active_children
+from multiprocessing import Process, active_children
 import tensorflow as tf
 import timeit
 from errordetector import ErrorDetector
@@ -21,19 +21,19 @@ def test_ops(model):
 
 def worker_func(in_queue, out_queue, hr_t, tr_h):
     while True:
-        dat = in_queue.get()
+        dat, in_queue = in_queue[0], in_queue[1:]
         if dat is None:
             in_queue.task_done()
             continue
 
         testing_data, head_pred, tail_pred = dat
-        out_queue.put(test_evaluation(testing_data, head_pred, tail_pred, hr_t, tr_h))
+        out_queue.append(test_evaluation(testing_data, head_pred, tail_pred, hr_t, tr_h))
         in_queue.task_done()
 
 
 def data_generator_func(in_queue, out_queue, tr_h, hr_t, n_entity, neg_weight):
     while True:
-        dat = in_queue.get()
+        dat, in_queue = in_queue[0], in_queue[1:]
         if dat is None:
             break
 
@@ -57,7 +57,7 @@ def data_generator_func(in_queue, out_queue, tr_h, hr_t, n_entity, neg_weight):
 
                 hr_tlist.append([htr[idx, 0], htr[idx, 2]])
 
-        out_queue.put((np.asarray(hr_tlist, dtype=np.int32), np.asarray(hr_tweight, dtype=np.float32),
+        out_queue.append((np.asarray(hr_tlist, dtype=np.int32), np.asarray(hr_tweight, dtype=np.float32),
                        np.asarray(tr_hlist, dtype=np.int32), np.asarray(tr_hweight, dtype=np.float32)))
 
 
@@ -504,8 +504,8 @@ class ProjE(ErrorDetector):
         total_inst = self.n_train
 
         # training data generator
-        raw_training_data_queue = Queue()
-        training_data_queue = Queue()
+        raw_training_data_queue = []
+        training_data_queue = []
         data_generators = list()
         for i in range(self.n_generator):
             data_generators.append(Process(target=data_generator_func, args=(
@@ -523,7 +523,7 @@ class ProjE(ErrorDetector):
                 print("initializing raw training data...")
             nbatches_count = 0
             for dat in self.raw_training_data(batch_size=self.batch):
-                raw_training_data_queue.put(dat)
+                raw_training_data_queue.append(dat)
                 nbatches_count += 1
             if self.verbose:
                 print("raw training data initialized.")
@@ -531,7 +531,8 @@ class ProjE(ErrorDetector):
             while nbatches_count > 0:
                 nbatches_count -= 1
 
-                hr_tlist, hr_tweight, tr_hlist, tr_hweight = training_data_queue.get()
+                hr_tlist, hr_tweight, tr_hlist, tr_hweight = training_data_queue[0]
+                training_data_queue = training_data_queue[1:]
 
                 l, rl, _ = self.sess.run(
                     [train_loss, self.regularizer_loss, train_op], {train_hrt_input: hr_tlist,
