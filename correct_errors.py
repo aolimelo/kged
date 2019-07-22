@@ -1,18 +1,20 @@
-from sdvalidate import SDValidate
-from argparse import ArgumentParser
-from patybred import PaTyBRED
-from embeddings import SKGEWrapper, ProjE
-from util import to_triples, short_str
-import numpy as np
-from datetime import datetime
-from entityasm import EntityASM, EntityDisamb
 import pickle
-from errordetector import ErrorDetector
+from argparse import ArgumentParser
+from datetime import datetime
+
+import numpy as np
 import scipy.sparse as sp
 
+from embeddings import SKGEWrapper, ProjE
+from entityasm import EntityASM, EntityDisamb
+from errordetector import ErrorDetector
+from patybred import PaTyBRED
+from sdvalidate import SDValidate
+from util import to_triples, short_str
 
 
-def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01, min_score=0.75, min_score_gain=1.5, max_dist=2, domains=None,
+def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01, min_score=0.75, min_score_gain=1.5,
+            max_dist=2, domains=None,
             ranges=None):
     global rels_dict
     global ents_dict
@@ -20,12 +22,12 @@ def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01,
     types = ed.types
 
     if tp is not None and tpdata is not None:
-        inv_ents_dict = {k:v for v,k in ents_dict.items()}
+        inv_ents_dict = {k: v for v, k in ents_dict.items()}
         tpd_ents_dict = tpdata["entities_dict"].item()
         if not isinstance(tpd_ents_dict.keys()[0], int):
             tpd_ents_dict = {k: v for v, k in tpd_ents_dict.items()}
 
-        tpd_ents_dict = {inv_ents_dict[ent]:i for i,ent in tpd_ents_dict.items()}
+        tpd_ents_dict = {inv_ents_dict[ent]: i for i, ent in tpd_ents_dict.items()}
         tpfeats = sp.coo_matrix(tpdata["feats"].item()).tocsr()
 
     for i, (s, o, p) in enumerate(triples[:n]):
@@ -42,7 +44,7 @@ def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01,
 
             if relevant_s_types:
                 s_types = tp.predict(tpfeats[tpd_ents_dict[s]])[0]
-                #print(short_str(ents_dict[s]), s_types)
+                # print(short_str(ents_dict[s]), s_types)
                 if list(types[s, relevant_s_types]) != list(s_types[relevant_s_types]):
                     ed.types[s, relevant_s_types] = s_types[relevant_s_types]
                     new_score = ed.predict_proba([(s, o, p)])[0]
@@ -50,13 +52,14 @@ def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01,
                     if new_score / score >= min_score_gain and new_score > min_score:
                         old_types = [i for i in sp.csr_matrix(types[s]).indices]
                         new_types = [i for i in sp.csr_matrix(s_types).indices]
-                        triple_str = str([short_str(rels_dict[p]),short_str(ents_dict[s]),short_str(ents_dict[o])])
-                        print("Triple = %s, Entity %s [old types = %s] [new types = %s]"%(triple_str, short_str(ents_dict[s]), old_types, new_types))
+                        triple_str = str([short_str(rels_dict[p]), short_str(ents_dict[s]), short_str(ents_dict[o])])
+                        print("Triple = %s, Entity %s [old types = %s] [new types = %s]" % (
+                        triple_str, short_str(ents_dict[s]), old_types, new_types))
                         continue
 
             if relevant_o_types:
                 o_types = tp.predict(tpfeats[tpd_ents_dict[o]])[0]
-                #print(short_str(ents_dict[o]), o_types)
+                # print(short_str(ents_dict[o]), o_types)
                 if list(types[o, relevant_o_types]) != list(o_types[relevant_o_types]):
                     ed.types[o, relevant_o_types] = o_types[relevant_o_types]
                     new_score = ed.predict_proba([(s, o, p)])[0]
@@ -65,26 +68,29 @@ def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01,
                         old_types = [i for i in sp.csr_matrix(types[o]).indices]
                         new_types = [i for i in sp.csr_matrix(o_types).indices]
                         triple_str = str([short_str(rels_dict[p]), short_str(ents_dict[s]), short_str(ents_dict[o])])
-                        print("Triple = %s, Entity %s [old types = %s] [new types = %s]"%(triple_str, short_str(ents_dict[o]), old_types, new_types))
+                        print("Triple = %s, Entity %s [old types = %s] [new types = %s]" % (
+                        triple_str, short_str(ents_dict[o]), old_types, new_types))
                         continue
-
-
 
         # In DBpedia confusions normally occur on the object
         s_candidates = []
-        #s_candidates = asm.get_similar_entities(s_ent, id=True, silent=True, match_all_words=True)
+        # s_candidates = asm.get_similar_entities(s_ent, id=True, silent=True, match_all_words=True)
         o_candidates = asm.get_similar_entities(o_ent, id=True, silent=True, match_all_words=True)
 
         if types is not None:
             if domains is not None:
-                s_candidates = [(s_cand,dist) for s_cand, (freq, dist, ent_ids, w) in s_candidates if types[s_cand,domains[p]] and dist <= max_dist and (s_cand,o,p) not in triples]
+                s_candidates = [(s_cand, dist) for s_cand, (freq, dist, ent_ids, w) in s_candidates if
+                                types[s_cand, domains[p]] and dist <= max_dist and (s_cand, o, p) not in triples]
 
             if ranges is not None:
-                o_candidates = [(o_cand,dist) for o_cand, (freq, dist, ent_ids, w) in o_candidates if types[o_cand, ranges[p]] and dist <= max_dist and (s,o_cand,p) not in triples]
+                o_candidates = [(o_cand, dist) for o_cand, (freq, dist, ent_ids, w) in o_candidates if
+                                types[o_cand, ranges[p]] and dist <= max_dist and (s, o_cand, p) not in triples]
 
         if disamb is not None:
-            s_candidates += [(s_cand,1) for s_cand in disamb.suggestions(s) if types[s_cand, domains[p]] and (s_cand,o,p) not in triples]
-            o_candidates += [(o_cand,1) for o_cand in disamb.suggestions(o) if types[o_cand, ranges[p]] and (s,o_cand,p) not in triples]
+            s_candidates += [(s_cand, 1) for s_cand in disamb.suggestions(s) if
+                             types[s_cand, domains[p]] and (s_cand, o, p) not in triples]
+            o_candidates += [(o_cand, 1) for o_cand in disamb.suggestions(o) if
+                             types[o_cand, ranges[p]] and (s, o_cand, p) not in triples]
 
         fixed_triple = None
         max_score = score
@@ -113,11 +119,11 @@ def correct(triples, scores, ed, asm, tp=None, tpdata=None, disamb=None, p=0.01,
         if fixed_triple is not None:
             print(
                 "old triple [%f]: %s(%s , %s)" % (
-                score, short_str(rels_dict[p]), short_str(ents_dict[s]), short_str(ents_dict[o])))
+                    score, short_str(rels_dict[p]), short_str(ents_dict[s]), short_str(ents_dict[o])))
             s, o, p = fixed_triple
             print(
                 "new triple [%f]: %s(%s , %s)" % (
-                max_score, short_str(rels_dict[p]), short_str(ents_dict[s]), short_str(ents_dict[o])))
+                    max_score, short_str(rels_dict[p]), short_str(ents_dict[s]), short_str(ents_dict[o])))
 
 
 if __name__ == '__main__':
@@ -130,7 +136,8 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--embeddings", type=str, default=None, help="path to dataset with hole embeddings")
     parser.add_argument("-asm", "--approx-sim", type=str, default=None, help="path to ASM object")
     parser.add_argument("-tp", "--type-predictor", type=str, default=None, help="path to type prediction pkl file")
-    parser.add_argument("-tpd", "--type-prediction-data", type=str, default=None, help="path to type prediction data npz file")
+    parser.add_argument("-tpd", "--type-prediction-data", type=str, default=None,
+                        help="path to type prediction data npz file")
     parser.add_argument("-lp", "--load-path", type=str, default=None, help="path to load trained model")
     parser.add_argument("-sp", "--save-path", type=str, default=None, help="path to save trained model")
     parser.add_argument("-fs", "--feature-selection", type=str, default="chi2", help="feature selection method")
@@ -157,8 +164,6 @@ if __name__ == '__main__':
 
     parser.add_argument("-sok", "--convert-to-sok", dest="sok", action="store_true",
                         help="convert csr_matrix to sok_matrix make cell access faster")
-    parser.add_argument("-mc", "--mem-cache", dest="mem_cache", action="store_true",
-                        help="use cache and evict to disk to reduce memory usage")
     parser.add_argument("-pp", "--plot", dest="plot", action="store_true", help="plot PRAUC")
     parser.add_argument("-ut", "--use-types", dest="use_types", action="store_true",
                         help="whether to use type assertions for learning embeddings")
@@ -174,7 +179,7 @@ if __name__ == '__main__':
     hist_path = args.input.replace(".npz", "-" + args.method + "-scores-dist.png")
     scores_path = args.input.replace(".npz", "-" + args.method + "-scores.pkl")
 
-    d = np.load(args.input)
+    d = np.load(args.input, allow_pickle=True)
     X = None
     types = d["types"].item()
     domains = d["domains"].item()
@@ -183,12 +188,10 @@ if __name__ == '__main__':
     rels_dict = d["relations_dict"].item()
     type_hierarchy = None
 
-
     if not isinstance(ents_dict.keys()[0], int):
         ents_dict = {k: v for v, k in ents_dict.items()}
     if not isinstance(rels_dict.keys()[0], int):
         rels_dict = {k: v for v, k in rels_dict.items()}
-
 
     if args.load_path is None:
         X = d["data"]
@@ -207,21 +210,21 @@ if __name__ == '__main__':
             ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
                           n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                           min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                          path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                          path_selection_mode=args.path_selection_mode,
                           convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
         if args.method == "tybred":
             ed = PaTyBRED(max_depth=0, max_paths_per_level=0, clf_name=args.classifier, so_type_feat=True,
                           n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                           min_sup=args.minimum_support,
-                          path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                          path_selection_mode=args.path_selection_mode,
                           convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
         if args.method == "patybred":
             ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=True,
                           n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                           min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                          path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                          path_selection_mode=args.path_selection_mode,
                           convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
         if args.method in ["transe", "hole", "rescal"]:
@@ -253,7 +256,7 @@ if __name__ == '__main__':
         sorted_triples = [triples[i] for i in np.argsort(scores)]
         scores.sort()
     else:
-        score_triples = pickle.load(file(args.triple_scores,"rb"))
+        score_triples = pickle.load(open(args.triple_scores, "rb"))
         scores = [score for rank, score, triple in score_triples]
         sorted_triples = [triple for rank, score, triple in score_triples]
 
@@ -261,7 +264,7 @@ if __name__ == '__main__':
     if args.approx_sim is None:
         asm = EntityASM(max_edit_distance=1, k=100, verbose=False)
         asm.create_dictionary(ents_dict)
-        #asm.save("asm-dbpedia-2016.pkl")
+        # asm.save("asm-dbpedia-2016.pkl")
     else:
         asm = EntityASM.load(args.approx_sim)
 
@@ -272,7 +275,7 @@ if __name__ == '__main__':
     tp = None
     tpd = None
     if args.type_predictor is not None and args.type_prediction_data is not None:
-        tp = pickle.load(file(args.type_predictor,"rb"))
-        tpdata = np.load(args.type_prediction_data)
+        tp = pickle.load(open(args.type_predictor, "rb"))
+        tpdata = np.load(args.type_prediction_data, allow_pickle=True)
 
     correct(sorted_triples, scores, ed, asm, tp, tpdata, disamb, min_score_gain=args.min_score_gain)

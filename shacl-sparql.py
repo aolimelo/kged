@@ -182,10 +182,10 @@ if __name__ == '__main__':
         condition = lambda x, conf=args.conf: (float(x[0]) / sum(x)) >= conf
 
     # print("#loading patybred model")
-    m = pickle.load(file(args.model, "rb"))
+    m = pickle.load(open(args.model, "rb"))
 
     # print("#loading dictionaries")
-    d = np.load(args.data)
+    d = np.load(args.data, allow_pickle=True)
     rels_dict = {k: v for v, k in d["relations_dict"].item().items()}
     type_dict = {k: v for v, k in d["types_dict"].item().items()}
 

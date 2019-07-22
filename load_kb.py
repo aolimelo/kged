@@ -57,7 +57,7 @@ if __name__ == '__main__':
     dict_t = {}
 
     print("loading dictionaries")
-    f = file(args.input, "rb")
+    f = open(args.input, "rb")
     for line in f:
         if line:
             m = pattern.match(line)
@@ -95,7 +95,7 @@ if __name__ == '__main__':
                 continue
     print("%d entities, %d types, %d properties" % (len(dict_s), len(dict_t), len(dict_p)))
 
-    f = file(args.input, "rb")
+    f = open(args.input, "rb")
     data_coo = [{"rows": [], "cols": [], "vals": []} for i in range(len(dict_p))]
     type_coo = {"rows": [], "cols": [], "vals": []}
     domains = {}
@@ -183,19 +183,19 @@ if __name__ == '__main__':
     prop_total = len(dict_p) if dict_p else 0
     prop_matched = len(prop_dag) if prop_dag else 0
 
-    print "load types hierarchy: total=%d matched=%d" % (type_total, type_matched)
-    print "load relations hierarchy: total=%d matched=%d" % (prop_total, prop_matched)
+    print("load types hierarchy: total=%d matched=%d" % (type_total, type_matched))
+    print("load relations hierarchy: total=%d matched=%d" % (prop_total, prop_matched))
 
 
     if len(equiv_t) > 0:
-        print "adding class equivalences"
+        print("adding class equivalences")
         typedata = typedata.tocsc()
         for t1,t2 in equiv_t.items():
             typedata[:,t1] = typedata[:,t1] = typedata[:,t1] + typedata[:,t2]
         typedata = typedata.tocsr()
 
     if args.matdomran:
-        print "materializing domain and range restrictions"
+        print("materializing domain and range restrictions")
         if domains is not None or ranges is not None:
             typedata_lil = typedata.tolil()
             for p,t in domains.items():
@@ -209,7 +209,7 @@ if __name__ == '__main__':
             typedata = typedata_lil.tocsr()
 
     if args.mattypes:
-        print "materializing types hierarchy"
+        print("materializing types hierarchy")
         if type_dag:
             n1 = typedata.nnz
             typedata = typedata.tocsc()
@@ -229,10 +229,10 @@ if __name__ == '__main__':
             typedata = coo_matrix((val,(row,col)),shape=typedata.shape, dtype=typedata.dtype)
             typedata = typedata.tocsr()
             n2 = typedata.nnz
-            print "%d type assertions add by reasoning subClassOf relations" % (n2 - n1)
+            print("%d type assertions add by reasoning subClassOf relations" % (n2 - n1))
 
     if args.matprops:
-        print "materializing properties hierarchy"
+        print("materializing properties hierarchy")
         if prop_dag:
             n1 = sum([A.nnz for A in data])
             ph_levels = level_hierarchy(prop_dag)
@@ -241,7 +241,7 @@ if __name__ == '__main__':
                     for p in n.parents:
                         data[p] = data[p] + data[n.node_id]
             n2 = sum([A.nnz for A in data])
-            print "%d relation assertions added by reasoning subPropertyOf relations" % (n2 - n1)
+            print("%d relation assertions added by reasoning subPropertyOf relations" % (n2 - n1))
 
     if args.output is None:
         args.output = args.input.replace("." + input_format, ".npz")

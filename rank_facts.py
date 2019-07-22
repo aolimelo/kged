@@ -38,8 +38,6 @@ if __name__ == '__main__':
 
     parser.add_argument("-sok", "--convert-to-sok", dest="sok", action="store_true",
                         help="convert csr_matrix to sok_matrix make cell access faster")
-    parser.add_argument("-mc", "--mem-cache", dest="mem_cache", action="store_true",
-                        help="use cache and evict to disk to reduce memory usage")
     parser.add_argument("-ut", "--use-types", dest="use_types", action="store_true",
                         help="whether to use type assertions for learning embeddings")
     parser.set_defaults(mem_cache=False)
@@ -59,7 +57,7 @@ if __name__ == '__main__':
     hist_path = args.input.replace(".npz", "-" + args.method + "-scores-dist.png")
     scores_path = args.input.replace(".npz", "-" + args.method + "-scores.pkl")
 
-    d = np.load(args.input)
+    d = np.load(args.input, allow_pickle=True)
 
     X = d["data"]
     types = d["types"].item()
@@ -91,27 +89,27 @@ if __name__ == '__main__':
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode, 
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
     if args.method == "pabred":
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=False,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode, 
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
     if args.method == "tybred":
         ed = PaTyBRED(max_depth=0, max_paths_per_level=0, clf_name=args.classifier, so_type_feat=True,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode, 
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
     if args.method == "patybred":
         ed = PaTyBRED(max_depth=args.max_path_length, clf_name=args.classifier, so_type_feat=True,
                       n_neg=args.n_negatives, lfs=args.feature_selection, max_feats=args.max_feats,
                       min_sup=args.minimum_support, max_paths_per_level=args.max_paths_per_level,
-                      path_selection_mode=args.path_selection_mode, reduce_mem_usage=args.mem_cache,
+                      path_selection_mode=args.path_selection_mode, 
                       convert_to_sok=args.sok, max_pos_train=args.max_ts, max_fs_data_size=args.max_fs)
 
     if args.method in ["transe", "hole", "rescal"]:
