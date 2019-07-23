@@ -39,7 +39,7 @@ python detect_errors.py dataset-ek1.npz -m patybred -o ranked_dataset.pkl -sp le
 
 ## Generating SHACL Constraints
 
-Implementation of the generation of SHACL-SPARQL relation constraints from the [`paper`](https://dl.acm.org/citation.cfm?doid=3148011.3148033) "Learning SHACL Constraints for Validation of Relation Assertions in Knowledge Graphs" submitted to ESWC 2018.
+Implementation of the generation of SHACL-SPARQL relation constraints from the [`paper`](http://www.semantic-web-journal.net/content/automatic-detection-relation-assertion-errors-and-induction-relation-constraints-1) "Automatic Detection of Relation Assertion Errors and Induction of Relation Constraints" submitted to the Semantic Web Journal.
 
 In order to generate the SHACL constraints it is necessary to learn a PaTyBRED model with decision trees as local classifiers (`-m patybred -clf dt`) when learning the model.
 When generating the constraints there two mandatory parameters: the first is the path to the learned model and the second the path to the original KG dataset, which contains the relation  and type names.
